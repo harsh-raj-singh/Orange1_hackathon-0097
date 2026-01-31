@@ -1,0 +1,34 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "orange1-chat",
+  "compatibility_date": "2025-10-08",
+  "compatibility_flags": ["nodejs_compat"],
+  "main": "./src/api/index.ts",
+  "observability": { "enabled": true },
+  "upload_source_maps": true,
+  "assets": {
+    "directory": "./dist/client",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "orange1-db",
+      "database_id": "YOUR_D1_DATABASE_ID",
+      "migrations_dir": "src/api/migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "bucket_name": "orange1-bucket",
+      "binding": "BUCKET"
+    }
+  ],
+  "vars": {
+    "AI_GATEWAY_BASE_URL": "https://api.runable.com/api/gateway/v1",
+    "AI_GATEWAY_API_KEY": "YOUR_AI_GATEWAY_API_KEY",
+    "UPSTASH_VECTOR_REST_URL": "YOUR_UPSTASH_VECTOR_URL",
+    "UPSTASH_VECTOR_REST_TOKEN": "YOUR_UPSTASH_VECTOR_TOKEN"
+  }
+}
