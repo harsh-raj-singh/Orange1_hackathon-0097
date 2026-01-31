@@ -116,5 +116,15 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-family: 'Outfit', system-ui, sans-serif;
   }
+  
+  code, pre, .font-mono {
+    font-family: 'JetBrains Mono', monospace;
+  }
+}
+
+/* Smooth scroll for all browsers */
+html {
+  scroll-behavior: smooth;
 }
