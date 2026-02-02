@@ -32,6 +32,8 @@ export const conversations = sqliteTable("conversations", {
   summary: text("summary"),
   messageCount: integer("message_count").default(0),
   globalSharingBlocked: integer("global_sharing_blocked", { mode: "boolean" }).default(false), // PII detected and user rejected sharing
+  deleted: integer("deleted", { mode: "boolean" }).default(false), // Soft delete - hidden from user but kept in DB
+  deletedAt: integer("deleted_at", { mode: "timestamp" }), // When it was deleted
   createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()),
   updatedAt: integer("updated_at", { mode: "timestamp" }).$defaultFn(() => new Date()),
 });

@@ -121,6 +121,13 @@ export class GraphService {
     return id;
   }
 
+  async updateConversationActivity(conversationId: string): Promise<void> {
+    await this.db
+      .update(schema.conversations)
+      .set({ updatedAt: new Date() })
+      .where(eq(schema.conversations.id, conversationId));
+  }
+
   async updateConversationSummary(conversationId: string, summary: string): Promise<void> {
     await this.db
       .update(schema.conversations)
@@ -510,6 +517,109 @@ export class GraphService {
       .get();
     
     return result?.blocked || false;
+  }
+
+  // ============ DELETE CONVERSATION (user graph only, keeps global) ============
+
+  /**
+   * Soft delete a conversation from user's view:
+   * - Marks conversation as "deleted" (hidden from user)
+   * - Removes user association from insights (so they don't show in user graph)
+   * - Keeps insights linked to topics for global graph
+   * - Keeps messages in DB for data integrity
+   */
+  async deleteConversationFromUserGraph(conversationId: string, userId: string): Promise<{
+    deleted: boolean;
+    insightsAnonymized: number;
+  }> {
+    // 1. Verify the conversation belongs to this user
+    const conv = await this.db
+      .select()
+      .from(schema.conversations)
+      .where(
+        and(
+          eq(schema.conversations.id, conversationId),
+          eq(schema.conversations.userId, userId)
+        )
+      )
+      .get();
+
+    if (!conv) {
+      return { deleted: false, insightsAnonymized: 0 };
+    }
+
+    // 2. Get insights from this conversation
+    const insights = await this.db
+      .select()
+      .from(schema.insights)
+      .where(eq(schema.insights.conversationId, conversationId));
+
+    // 3. Anonymize insights - set userId to "anonymous" so they stay in global graph
+    // but don't show in user's personal graph
+    for (const insight of insights) {
+      await this.db
+        .update(schema.insights)
+        .set({ userId: "anonymous" })
+        .where(eq(schema.insights.id, insight.id));
+    }
+
+    // 4. Remove conversation-topic links (removes from user's topic graph)
+    await this.db
+      .delete(schema.conversationTopics)
+      .where(eq(schema.conversationTopics.conversationId, conversationId));
+
+    // 5. Mark conversation as deleted (soft delete)
+    await this.db
+      .update(schema.conversations)
+      .set({ 
+        deleted: true,
+        deletedAt: new Date()
+      })
+      .where(eq(schema.conversations.id, conversationId));
+
+    return { 
+      deleted: true, 
+      insightsAnonymized: insights.length 
+    };
+  }
+
+  /**
+   * Get user's conversations excluding deleted ones
+   */
+  async getUserActiveConversations(userId: string, limit: number = 10): Promise<Array<{
+    id: string;
+    summary: string | null;
+    messageCount: number | null;
+    createdAt: Date | null;
+    topics: string[];
+  }>> {
+    const conversations = await this.db
+      .select()
+      .from(schema.conversations)
+      .where(
+        and(
+          eq(schema.conversations.userId, userId),
+          eq(schema.conversations.deleted, false)
+        )
+      )
+      .orderBy(desc(schema.conversations.updatedAt))
+      .limit(limit);
+
+    const result = [];
+    for (const conv of conversations) {
+      const topicLinks = await this.db
+        .select({ name: schema.topics.name })
+        .from(schema.conversationTopics)
+        .innerJoin(schema.topics, eq(schema.conversationTopics.topicId, schema.topics.id))
+        .where(eq(schema.conversationTopics.conversationId, conv.id));
+
+      result.push({
+        ...conv,
+        topics: topicLinks.map(t => t.name),
+      });
+    }
+
+    return result;
   }
 }
 

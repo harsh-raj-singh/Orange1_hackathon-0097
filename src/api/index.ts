@@ -6,6 +6,7 @@ import chatRouter from "./routes/chat";
 import graphRouter from "./routes/graph";
 import knowledgeRouter from "./routes/knowledge";
 import gmailRouter from "./routes/gmail";
+import processorRouter from "./routes/processor";
 
 // Types for Cloudflare bindings
 interface Env {
@@ -58,6 +59,7 @@ app.route("/chat", chatRouter);
 app.route("/graph", graphRouter);
 app.route("/knowledge", knowledgeRouter);
 app.route("/gmail", gmailRouter);
+app.route("/processor", processorRouter);
 
 // 404 handler
 app.notFound((c) => {

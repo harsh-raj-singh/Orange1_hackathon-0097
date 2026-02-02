@@ -46,6 +46,7 @@ graphRouter.get("/user/:userId/topics", async (c) => {
 /**
  * GET /api/graph/global
  * Get the ENTIRE global knowledge graph (all users, all topics)
+ * Now includes GLOBAL FREQUENCY for hierarchical node sizing
  */
 graphRouter.get("/global", async (c) => {
   const db = c.env.DB;
@@ -56,9 +57,18 @@ graphRouter.get("/global", async (c) => {
   c.header('Expires', '0');
 
   try {
-    // Get all topics
+    // Get all topics WITH GLOBAL FREQUENCY (how many conversations use each topic)
     const topicsResult = await db.prepare(`
-      SELECT id, name, description FROM topics ORDER BY name
+      SELECT 
+        t.id, 
+        t.name, 
+        t.description,
+        COUNT(DISTINCT ct.conversation_id) as global_frequency,
+        (SELECT COUNT(*) FROM topic_relations WHERE source_topic_id = t.id OR target_topic_id = t.id) as connection_count
+      FROM topics t
+      LEFT JOIN conversation_topics ct ON t.id = ct.topic_id
+      GROUP BY t.id
+      ORDER BY global_frequency DESC, t.name
     `).all();
 
     // Get all topic relations
@@ -107,11 +117,18 @@ graphRouter.get("/global", async (c) => {
       LIMIT 20
     `).all();
 
-    // Build graph data for visualization
+    // Calculate max frequency for normalization
+    const maxFrequency = Math.max(...(topicsResult.results || []).map((t: any) => t.global_frequency || 1), 1);
+
+    // Build graph data for visualization with frequency
     const nodes = (topicsResult.results || []).map((t: any) => ({
       id: t.name,
       label: t.name.replace(/-/g, ' '),
-      type: 'topic'
+      type: 'topic',
+      frequency: t.global_frequency || 1,
+      connections: t.connection_count || 0,
+      // Normalized frequency (0-1) for client-side sizing
+      normalizedFrequency: (t.global_frequency || 1) / maxFrequency
     }));
 
     const edges = (relationsResult.results || []).map((r: any) => ({
@@ -126,7 +143,8 @@ graphRouter.get("/global", async (c) => {
         totalTopics: nodes.length,
         totalConnections: edges.length,
         totalInsights: insightsResult.results?.length || 0,
-        totalConversations: conversationsResult.results?.length || 0
+        totalConversations: conversationsResult.results?.length || 0,
+        maxFrequency // Send max for reference
       },
       graph: { nodes, edges },
       topics: topicsResult.results,
@@ -149,6 +167,7 @@ graphRouter.get("/global", async (c) => {
 /**
  * GET /api/graph/user/:userId/full
  * Get complete user knowledge data (topics, insights, conversations)
+ * Now includes USER-SPECIFIC FREQUENCY for hierarchical node sizing
  */
 graphRouter.get("/user/:userId/full", async (c) => {
   const userId = c.req.param("userId");
@@ -167,6 +186,9 @@ graphRouter.get("/user/:userId/full", async (c) => {
         c.summary,
         c.message_count,
         c.created_at,
+        c.is_useful,
+        c.usefulness_reason,
+        c.processed,
         GROUP_CONCAT(DISTINCT t.name) as topics
       FROM conversations c
       LEFT JOIN conversation_topics ct ON c.id = ct.conversation_id
@@ -192,15 +214,19 @@ graphRouter.get("/user/:userId/full", async (c) => {
       ORDER BY i.created_at DESC
     `).bind(userId).all();
 
-    // Get user's topics with connection counts
+    // Get user's topics WITH USER-SPECIFIC FREQUENCY (how many of USER'S conversations use each topic)
     const topicsResult = await db.prepare(`
-      SELECT DISTINCT t.name, t.id,
+      SELECT 
+        t.name, 
+        t.id,
+        COUNT(DISTINCT c.id) as user_frequency,
         (SELECT COUNT(*) FROM topic_relations WHERE source_topic_id = t.id OR target_topic_id = t.id) as connection_count
       FROM conversations c
       JOIN conversation_topics ct ON c.id = ct.conversation_id
       JOIN topics t ON ct.topic_id = t.id
       WHERE c.user_id = ?
-      ORDER BY connection_count DESC
+      GROUP BY t.id
+      ORDER BY user_frequency DESC, connection_count DESC
     `).bind(userId).all();
 
     // Get topic relationships for this user's topics
@@ -220,11 +246,16 @@ graphRouter.get("/user/:userId/full", async (c) => {
       `).all();
     }
 
-    // Build visualization data
+    // Calculate max frequency for this user for normalization
+    const maxFrequency = Math.max(...(topicsResult.results || []).map((t: any) => t.user_frequency || 1), 1);
+
+    // Build visualization data with frequency
     const nodes = (topicsResult.results || []).map((t: any) => ({
       id: t.name,
       label: t.name.replace(/-/g, ' '),
       connections: t.connection_count,
+      frequency: t.user_frequency || 1,
+      normalizedFrequency: (t.user_frequency || 1) / maxFrequency,
       type: 'topic'
     }));
 
@@ -240,7 +271,8 @@ graphRouter.get("/user/:userId/full", async (c) => {
         conversations: conversationsResult.results?.length || 0,
         insights: insightsResult.results?.length || 0,
         topics: topicsResult.results?.length || 0,
-        connections: relationsResult.results?.length || 0
+        connections: relationsResult.results?.length || 0,
+        maxFrequency
       },
       graph: { nodes, edges },
       conversations: (conversationsResult.results || []).map((c: any) => ({

@@ -11,6 +11,7 @@ interface Message {
 
 interface ChatSession {
   id: string;
+  conversationId: string | null; // The actual API conversation ID (conv_*)
   title: string;
   preview: string;
   timestamp: Date;
@@ -40,6 +41,7 @@ const loadConversations = (): ChatSession[] => {
     return parsed.map((c: ChatSession) => ({
       ...c,
       timestamp: new Date(c.timestamp),
+      conversationId: c.conversationId || null, // Handle old sessions without conversationId
     }));
   } catch {
     return [];
@@ -99,6 +101,15 @@ const ShieldIcon = () => (
   </svg>
 );
 
+const TrashIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="3 6 5 6 21 6" />
+    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+    <line x1="10" y1="11" x2="10" y2="17" />
+    <line x1="14" y1="11" x2="14" y2="17" />
+  </svg>
+);
+
 // PII Detection Modal Component
 const PIIModal = ({ 
   piiDetection, 
@@ -147,6 +158,72 @@ const PIIModal = ({
     </div>
   </div>
 );
+
+// Processing Status Badge Component (shows when conversation is analyzed)
+const ProcessingStatusBadge = ({ 
+  status 
+}: { 
+  status: { 
+    processed: boolean; 
+    isUseful: boolean | null; 
+    reason: string | null;
+    topicsExtracted: string[];
+    insightsCount: number;
+  } 
+}) => {
+  if (!status.processed) return null;
+  
+  const isUseful = status.isUseful;
+  
+  return (
+    <div className={`mx-4 mb-4 p-3 rounded-xl animate-in fade-in slide-in-from-bottom-2 duration-500 ${
+      isUseful 
+        ? "bg-gradient-to-br from-emerald-500/10 to-cyan-500/5 border border-emerald-500/20" 
+        : "bg-gradient-to-br from-gray-500/10 to-gray-400/5 border border-gray-500/20"
+    }`}>
+      <div className="flex items-start gap-3">
+        <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
+          isUseful ? "bg-emerald-500/20" : "bg-gray-500/20"
+        }`}>
+          {isUseful ? (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-emerald-400">
+              <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
+            </svg>
+          ) : (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-gray-400">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="8" x2="12" y2="12" />
+              <line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <h4 className={`text-xs font-semibold mb-1 ${isUseful ? "text-emerald-400" : "text-gray-400"}`}>
+            {isUseful ? "📚 Added to Knowledge Graph" : "💬 Conversation Not Stored"}
+          </h4>
+          <p className="text-xs text-gray-500 mb-2">{status.reason}</p>
+          {isUseful && status.topicsExtracted.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {status.topicsExtracted.map((topic, i) => (
+                <span 
+                  key={i} 
+                  className="px-2 py-0.5 text-[10px] font-medium bg-emerald-500/10 border border-emerald-500/20 rounded-full text-emerald-400"
+                >
+                  {topic}
+                </span>
+              ))}
+              {status.insightsCount > 0 && (
+                <span className="px-2 py-0.5 text-[10px] font-medium bg-cyan-500/10 border border-cyan-500/20 rounded-full text-cyan-400">
+                  +{status.insightsCount} insight{status.insightsCount > 1 ? "s" : ""}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
 
 // Typing Indicator Component
 const TypingIndicator = () => (
@@ -200,6 +277,7 @@ const Sidebar = ({
   currentSessionId,
   onSelectSession,
   onNewChat,
+  onDeleteSession,
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -207,6 +285,7 @@ const Sidebar = ({
   currentSessionId: string | null;
   onSelectSession: (id: string) => void;
   onNewChat: () => void;
+  onDeleteSession: (id: string) => void;
 }) => {
   const formatTimestamp = (date: Date) => {
     const now = new Date();
@@ -284,27 +363,44 @@ const Sidebar = ({
               </div>
             ) : (
               sessions.map((session) => (
-                <button
+                <div
                   key={session.id}
-                  onClick={() => onSelectSession(session.id)}
-                  className={`w-full text-left p-3 rounded-xl transition-all duration-200 group ${
+                  className={`relative w-full text-left p-3 rounded-xl transition-all duration-200 group ${
                     currentSessionId === session.id
                       ? "bg-gradient-to-r from-emerald-500/10 to-cyan-500/5 border border-emerald-500/20"
                       : "hover:bg-white/5 border border-transparent"
                   }`}
                 >
-                  <div className="flex items-start justify-between gap-2">
-                    <h3 className={`text-sm font-medium truncate ${
-                      currentSessionId === session.id ? "text-emerald-400" : "text-gray-200 group-hover:text-white"
-                    }`}>
-                      {session.title}
-                    </h3>
-                    <span className="text-[10px] text-gray-500 whitespace-nowrap">
-                      {formatTimestamp(session.timestamp)}
-                    </span>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1 line-clamp-2">{session.preview}</p>
-                </button>
+                  <button
+                    onClick={() => onSelectSession(session.id)}
+                    className="w-full text-left"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <h3 className={`text-sm font-medium truncate pr-6 ${
+                        currentSessionId === session.id ? "text-emerald-400" : "text-gray-200 group-hover:text-white"
+                      }`}>
+                        {session.title}
+                      </h3>
+                      <span className="text-[10px] text-gray-500 whitespace-nowrap">
+                        {formatTimestamp(session.timestamp)}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1 line-clamp-2 pr-6">{session.preview}</p>
+                  </button>
+                  {/* Delete button */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (window.confirm("Delete this conversation? It will be removed from your graph but kept in global knowledge.")) {
+                        onDeleteSession(session.id);
+                      }
+                    }}
+                    className="absolute right-2 top-2 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-red-500/20 text-gray-500 hover:text-red-400 transition-all"
+                    title="Delete conversation"
+                  >
+                    <TrashIcon />
+                  </button>
+                </div>
               ))
             )}
           </div>
@@ -376,10 +472,14 @@ const Index = () => {
     relatedContext,
     sendMessage,
     clearConversation,
+    deleteConversation,
     loadMessages,
     piiDetection,
     globalSharingBlocked,
     handlePIIConsent,
+    processingStatus,
+    isStreaming,
+    conversationId, // The actual API conversation ID
   } = useGraphChat({ userId });
 
   // Load conversations on mount
@@ -412,6 +512,7 @@ const Index = () => {
 
     const newSession: ChatSession = {
       id: sessionId,
+      conversationId: conversationId, // Store the actual API conversation ID
       title,
       preview,
       timestamp: new Date(),
@@ -429,7 +530,7 @@ const Index = () => {
 
     setSessions(updatedSessions);
     saveConversations(updatedSessions);
-  }, [messages, sessions, currentSessionId, relatedContext]);
+  }, [messages, sessions, currentSessionId, relatedContext, conversationId]);
 
   // Save conversation when messages change
   useEffect(() => {
@@ -462,10 +563,28 @@ const Index = () => {
   const handleSelectSession = (sessionId: string) => {
     const session = sessions.find((s) => s.id === sessionId);
     if (session) {
-      // Load the messages from the session
-      loadMessages(session.messages, sessionId);
+      // Load the messages from the session with the actual API conversationId
+      loadMessages(session.messages, session.conversationId || null);
       setCurrentSessionId(sessionId);
       setSidebarOpen(false);
+    }
+  };
+
+  const handleDeleteSession = async (sessionId: string) => {
+    const session = sessions.find((s) => s.id === sessionId);
+    // Delete from backend using the actual conversationId
+    const deleted = await deleteConversation(session?.conversationId || sessionId);
+    
+    if (deleted) {
+      // Remove from local state
+      const updatedSessions = sessions.filter((s) => s.id !== sessionId);
+      setSessions(updatedSessions);
+      saveConversations(updatedSessions);
+      
+      // If we deleted the current session, clear it
+      if (sessionId === currentSessionId) {
+        setCurrentSessionId(null);
+      }
     }
   };
 
@@ -484,6 +603,7 @@ const Index = () => {
         currentSessionId={currentSessionId}
         onSelectSession={handleSelectSession}
         onNewChat={handleNewChat}
+        onDeleteSession={handleDeleteSession}
       />
 
       {/* Main Chat Area */}
@@ -578,8 +698,13 @@ const Index = () => {
           />
         )}
 
+        {/* Processing Status Badge (shows when conversation is analyzed) */}
+        {processingStatus && !piiDetection && (
+          <ProcessingStatusBadge status={processingStatus} />
+        )}
+
         {/* Global Sharing Blocked Indicator */}
-        {globalSharingBlocked && !piiDetection && (
+        {globalSharingBlocked && !piiDetection && !processingStatus && (
           <div className="mx-4 mb-2 px-3 py-2 bg-gray-500/10 border border-gray-500/20 rounded-lg flex items-center gap-2">
             <ShieldIcon />
             <span className="text-xs text-gray-400">This conversation is private and won't be shared to global memory</span>

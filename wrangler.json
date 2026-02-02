@@ -14,21 +14,21 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "orange1-db",
-      "database_id": "YOUR_D1_DATABASE_ID",
+      "database_name": "yyo7aym00pqd66x0ls6xmzdtpa0j3k6y",
+      "database_id": "0d8e1061-96bd-47b8-ba04-0ddb33ead0c9",
       "migrations_dir": "src/api/migrations"
     }
   ],
   "r2_buckets": [
     {
-      "bucket_name": "orange1-bucket",
+      "bucket_name": "yyo7aym00pqd66x0ls6xmzdtpa0j3k6y",
       "binding": "BUCKET"
     }
   ],
   "vars": {
     "AI_GATEWAY_BASE_URL": "https://api.runable.com/api/gateway/v1",
-    "AI_GATEWAY_API_KEY": "YOUR_AI_GATEWAY_API_KEY",
-    "UPSTASH_VECTOR_REST_URL": "YOUR_UPSTASH_VECTOR_URL",
-    "UPSTASH_VECTOR_REST_TOKEN": "YOUR_UPSTASH_VECTOR_TOKEN"
+    "AI_GATEWAY_API_KEY": "rXqTW7ZgOacgecVCkAXOM",
+    "UPSTASH_VECTOR_REST_URL": "https://neutral-mink-93684-us1-vector.upstash.io",
+    "UPSTASH_VECTOR_REST_TOKEN": "ABYFMG5ldXRyYWwtbWluay05MzY4NC11czFhZG1pblpqZG1ZakkyTkRRdFpqSXhPUzAwWVRGakxUaGhZbVF0WkRFNE1EZG1PV0U1WVRVNQ=="
   }
 }
